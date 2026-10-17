@@ -1,42 +1,32 @@
 package com.hmdp.service.impl;
 
 import com.hmdp.dto.Result;
-import com.hmdp.entity.SeckillVoucher;
 import com.hmdp.entity.VoucherOrder;
 import com.hmdp.mapper.VoucherOrderMapper;
 import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
-import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
-import org.springframework.aop.framework.AopContext;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.hmdp.utils.MqConstants;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
-import java.time.LocalDateTime;
 import java.util.Collections;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+
 
 /**
  * 秒杀订单服务实现类：基于 Redis Lua + 阻塞队列的异步秒杀。
  * 流程：Lua 脚本原子地判断库存与一人一单 → 成功则立即返回订单号 →
  *       把下单任务放入内存阻塞队列 → 后台单线程异步扣库存、写订单表。
  * 这样接口只做 Redis 操作，响应极快，数据库压力由异步线程平滑消化。
- *
- * @author 虎哥
- * @since 2021-12-22
  */
 @Slf4j
 @Service
@@ -50,6 +40,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private StringRedisTemplate stringRedisTemplate;
     @Resource
     private RedissonClient redissonClient;
+    @Resource
+    private RabbitTemplate rabbitTemplate;
 
     private static final DefaultRedisScript<Long> SECKILL_SCRIPT;
     static {
@@ -58,41 +50,6 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         SECKILL_SCRIPT.setResultType(Long.class);
     }
 
-    // 订单阻塞队列：主线程放订单，异步线程取订单，容量约 100 万
-    private BlockingQueue<VoucherOrder> orderTasks = new ArrayBlockingQueue<>(1024 * 1024);
-    // 单线程线程池：串行消费队列，保证订单按入队顺序处理
-    private static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
-
-    //  Bean 初始化完成后立即启动异步消费线程
-    @PostConstruct
-    public void init() {
-        SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
-    }
-
-    // 异步订单处理器：不停从队列取单并落库
-    private class VoucherOrderHandler implements Runnable {
-        @Override
-        public void run() {
-            while (true) {
-                try {
-                    // 1.阻塞等待队列中的订单（无订单时线程挂起，不占 CPU）
-                    VoucherOrder voucherOrder = orderTasks.take();
-                    // 2.创建订单（扣库存 + 写订单表）
-                    handleVocherOrder(voucherOrder);
-                } catch (InterruptedException e) {
-                    log.error("获取订单异常", e);
-                }
-            }
-        }
-    }
-
-    // 异步线程内通过代理对象调用，保证 @Transactional 事务生效
-    private void handleVocherOrder(VoucherOrder voucherOrder) {
-        proxy.createVocherOrder(voucherOrder);
-    }
-
-    // 事务代理对象，在 seckillVoucher 中通过 AopContext 赋值
-    private IVoucherOrderService proxy;
 
     /**
      * 秒杀优惠券
@@ -123,10 +80,11 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         voucherOrder.setUserId(userId);
         // 4.3.代金券id
         voucherOrder.setVoucherId(voucherId);
-        // 4.4.获取代理对象（事务）
-        proxy = (IVoucherOrderService) AopContext.currentProxy();
-        // 4.5.放入阻塞队列
-        orderTasks.add(voucherOrder);
+        // 4.4.发送到 MQ（消费者收到后异步落库）
+        rabbitTemplate.convertAndSend(
+                MqConstants.ORDER_EXCHANGE,
+                MqConstants.ORDER_ROUTING_KEY,
+                voucherOrder);
         // 5.返回订单id
         return Result.ok(orderId);
     }
