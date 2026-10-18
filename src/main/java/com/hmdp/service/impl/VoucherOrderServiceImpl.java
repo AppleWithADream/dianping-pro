@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.hmdp.utils.MqConstants;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.connection.CorrelationData;
 
 import javax.annotation.Resource;
 import java.util.Collections;
@@ -80,11 +81,15 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         voucherOrder.setUserId(userId);
         // 4.3.代金券id
         voucherOrder.setVoucherId(voucherId);
+
         // 4.4.发送到 MQ（消费者收到后异步落库）
+        // CorrelationData：消息唯一标识（订单号），confirm 回调里能定位是哪条订单
+        CorrelationData correlationData = new CorrelationData("seckill:" + orderId);
         rabbitTemplate.convertAndSend(
                 MqConstants.ORDER_EXCHANGE,
                 MqConstants.ORDER_ROUTING_KEY,
-                voucherOrder);
+                voucherOrder,
+                correlationData);
         // 5.返回订单id
         return Result.ok(orderId);
     }

@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### 本地测试类（不纳入版本管理）###
+**/src/test/java/com/hmdp/*.java
+!**/src/test/java/com/hmdp/HmDianPingApplicationTests.java

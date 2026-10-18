@@ -1,4 +1,3 @@
-
 server:
   port: 8081
 spring:
@@ -27,6 +26,8 @@ spring:
     virtual-host: /
     username: guest
     password: guest
+    publisher-confirm-type: correlated   # 🆕 生产端确认：消息到交换机后异步回调（不阻塞发送）
+    publisher-returns: true              # 🆕 消息无法路由时触发 ReturnCallback
     listener:
       simple:
         acknowledge-mode: manual # 手动 ACK：业务成功才确认，失败不确认
