@@ -36,7 +36,7 @@ import static org.mockito.Mockito.when;
  *  - 100 行"没查"：所有请求都直接返回旧缓存数据，没有请求阻塞等待；
  *  - 只出现 1 行长句：唯一抢到锁的请求触发的后台重建任务，真实查了 1 次数据库。
  *
- * 运行前：请确保 Redis（192.168.100.128:6379）已启动。
+ * 运行前：请确保 Redis（your-redis-host:6379）已启动。
  */
 @SpringBootTest
 class ShopLogicalExpireConcurrencyTest {

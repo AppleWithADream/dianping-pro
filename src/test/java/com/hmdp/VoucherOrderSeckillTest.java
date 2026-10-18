@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * 不用 Postman：直接用线程池模拟成百上千人同时点"抢购"按钮。
  *
- * 运行前：Redis(192.168.100.128:6379)、MySQL(127.0.0.1:3306) 都要启动。
+ * 运行前：Redis(your-redis-host:6379)、MySQL(127.0.0.1:3306) 都要启动。
  * 测试券id固定为 1010，跟真实数据隔离，测前会自动重置 Redis 里的库存和订单集合。
  */
 @SpringBootTest

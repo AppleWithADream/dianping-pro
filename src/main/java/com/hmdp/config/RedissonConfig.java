@@ -18,7 +18,7 @@ public class RedissonConfig {
     public RedissonClient redissonClient() {
         Config config = new Config();
         // 单机节点地址与密码（教学项目直接写死，生产应走配置文件）
-        config.useSingleServer().setAddress("redis://192.168.100.128:6379").setPassword("123321");
+        config.useSingleServer().setAddress("redis://your-redis-host:6379").setPassword("your-redis-password");
         return Redisson.create(config);
     }
 }
