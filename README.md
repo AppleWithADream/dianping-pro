@@ -272,6 +272,14 @@ spring:
 
 **判定方法**：`订单数 + Redis 剩余库存 = 初始库存`。小于说明丢单（消息没落库），大于说明超卖。同时单独查 `GROUP BY user_id HAVING COUNT(*) > 1` 验证一人一单。
 
+**证据截图**（JMeter 聚合报告：2000 样本，吞吐 1819.8/s，平均 4ms，p99 13ms，异常率 0%）
+
+![秒杀压测聚合报告](docs/images/01-seckill-benchmark.png)
+
+**证据截图**（压测跑完后的数据校验：订单数 2000、重复单 0 行、MySQL 与 Redis 库存均为 0、两者相加等于 2000）
+
+![秒杀业务正确性校验](docs/images/02-seckill-verify.png)
+
 ---
 
 ## 快速开始
